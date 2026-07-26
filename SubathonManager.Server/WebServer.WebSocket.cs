@@ -30,6 +30,7 @@ public partial class WebServer
         OverlayEvents.OverlayRefreshRequested += SendRefreshRequest;
         SubathonEvents.SubathonValueConfigRequested += SendSubathonValues;
         SubathonEvents.SubathonTotalsUpdated += SendSubathonTotals;
+        SubathonEvents.SubscriptionTotalsUpdated += SendSubscriptionTotals;
 
         SubathonEvents.PromptRunStarted += OnPromptStart;
         SubathonEvents.PromptRunUpdate += OnPromptRunUpdate;
@@ -53,6 +54,7 @@ public partial class WebServer
         SubathonEvents.SubathonGoalListUpdated -= SendGoalsUpdated;
         SubathonEvents.SubathonValueConfigRequested -= SendSubathonValues;
         SubathonEvents.SubathonTotalsUpdated -= SendSubathonTotals;
+        SubathonEvents.SubscriptionTotalsUpdated -= SendSubscriptionTotals;
         
         SubathonEvents.PromptRunStarted -= OnPromptStart;
         SubathonEvents.PromptRunUpdate -= OnPromptRunUpdate;
@@ -220,6 +222,11 @@ public partial class WebServer
         if (totals != null)
             await SelectSendAsync(socket, SubathonTotalsToObject(totals));
 
+        var subTotals = await EventService.GetSubscriptionTotalsAsync(db);
+
+        if (subTotals != null)
+            await SelectSendAsync(socket, SubscriptionTotalsToObject(subTotals));
+
         var activeWheel = await db.WheelSets
             .Include(w => w.WheelItems)
             .ThenInclude(i => i.Action)
@@ -278,6 +285,27 @@ public partial class WebServer
         };
     }
 
+    private object SubscriptionTotalsToObject(SubscriptionTotals totals)
+    {
+        return new
+        {
+            type = "subscription_totals",
+            sub_total = totals.SubTotal,
+            sub_total_by_type = totals.SubTotalByEvent
+                .ToDictionary(k => k.Key.ToString(), k => k.Value),
+            sub_total_by_type_tier = totals.SubTotalByEventTier
+                .ToDictionary(k => k.Key.ToString(), k => k.Value),
+            simulated = new
+            {
+                sub_total = totals.Simulated.SubTotal,
+                sub_total_by_type = totals.Simulated.SubTotalByEvent
+                    .ToDictionary(k => k.Key.ToString(), k => k.Value),
+                sub_total_by_type_tier = totals.Simulated.SubTotalByEventTier
+                    .ToDictionary(k => k.Key.ToString(), k => k.Value),
+            }
+        };
+    }
+
     private object SubathonEventToObject(SubathonEvent subathonEvent)
     {
         var trueSource = subathonEvent.EventType.GetTypeTrueSource(subathonEvent.EventTypeMeta);
@@ -320,6 +348,11 @@ public partial class WebServer
     internal void SendSubathonTotals(SubathonTotals totals)
     {
         Task.Run(() => BroadcastAsyncObject(SubathonTotalsToObject(totals), WebsocketClientTypeHelper.ConsumersList));
+    }
+
+    internal void SendSubscriptionTotals(SubscriptionTotals totals)
+    {
+        Task.Run(() => BroadcastAsyncObject(SubscriptionTotalsToObject(totals), WebsocketClientTypeHelper.ConsumersList));
     }
 
     internal void SendRefreshRequest(Guid id)
@@ -809,6 +842,8 @@ public partial class WebServer
                                             window.handleValueConfig(data);
                                         else if (typeof window.handleTotalsUpdate === 'function' && data.type == 'subathon_totals')
                                             window.handleTotalsUpdate(data);
+                                        else if (typeof window.handleSubscriptionTotalsUpdate === 'function' && data.type == 'subscription_totals')
+                                            window.handleSubscriptionTotalsUpdate(data);
                                         else if (data.type == 'refresh_request' && document.title.startsWith('overlay') && (document.title.includes(data.id) || data.id == '{Guid.Empty}')) {{
                                             // for only the merged page
                                             window.location.reload();

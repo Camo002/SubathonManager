@@ -22,7 +22,8 @@ public static class SubathonEvents
     public static event Action<List<SubathonValueDto>>? SubathonValuesPatched;
     
     public static event Action<SubathonTotals>? SubathonTotalsUpdated;
-    
+    public static event Action<SubscriptionTotals>? SubscriptionTotalsUpdated;
+
     public static event Action<SubathonPromptRun, SubathonPrompt?>? PromptRunStarted;
     public static event Action<SubathonPromptRun, SubathonPrompt?>? PromptRunUpdate;
     public static event Action<SubathonPromptRun, long>? PromptRunProgressUpdated;
@@ -32,6 +33,11 @@ public static class SubathonEvents
     public static void RaiseSubathonTotalsUpdated(SubathonTotals totals)
     {
         SubathonTotalsUpdated?.Invoke(totals);
+    }
+
+    public static void RaiseSubscriptionTotalsUpdated(SubscriptionTotals totals)
+    {
+        SubscriptionTotalsUpdated?.Invoke(totals);
     }
 
     
