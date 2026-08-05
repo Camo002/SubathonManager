@@ -7,6 +7,29 @@ public enum WidgetType
     Video = 2
 }
 
+public enum WidgetContextAction
+{
+    ToggleVisibility,
+    Clone,
+    Delete,
+    ResetScale,
+    Refresh
+}
+
+public enum WidgetDisplayKind
+{
+    Widget,//
+    UnpackedWidget,//
+    Image,
+    Video
+}
+
+public enum WidgetCatalogSource
+{
+    Imported,
+    Preset
+}
+
 public static class WidgetTypeHelper
 {
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)

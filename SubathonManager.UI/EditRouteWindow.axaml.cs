@@ -18,6 +18,7 @@ using SubathonManager.Core.Interfaces;
 using SubathonManager.Core.Models;
 using SubathonManager.Core.Objects;
 using SubathonManager.Data;
+using SubathonManager.Data.Widgets;
 using SubathonManager.UI.Views;
 using SubathonManager.UI.Services;
 
@@ -68,9 +69,11 @@ public partial class EditRouteWindow : Window
         InitializeComponent();
         EditorRouteId = routeId;
         WidgetsList.ItemsSource = _widgets;
-        BrowserEditorButton.IsVisible = OperatingSystem.IsLinux() || OperatingSystem.IsMacOS();
-        WebViewWarningButton.IsVisible = OperatingSystem.IsLinux() || OperatingSystem.IsMacOS();
+        BrowserEditorButton.IsVisible = OperatingSystem.IsLinux();
+        WebViewWarningButton.IsVisible = OperatingSystem.IsLinux();
         UiUtils.UiHelpers.EnableClickAwayUnfocus(this);
+        LoadPreviewBgPreference();
+        TryEnableEditorFileDrop();
 
         PreviewWebView.EnvironmentRequested += (_, e) =>
         {
@@ -103,7 +106,11 @@ public partial class EditRouteWindow : Window
         Loaded += EditRouteWindow_Loaded;
         ObsConnected = ServiceManager.OBS.Connected;
         IntegrationEvents.ConnectionUpdated += OnObsConnectionUpdated;
-        Closed += (_, _) => IntegrationEvents.ConnectionUpdated -= OnObsConnectionUpdated;
+        Closed += (_, _) =>
+        {
+            IntegrationEvents.ConnectionUpdated -= OnObsConnectionUpdated;
+            WidgetEvents.WidgetActionRequested -= OnWidgetActionRequested;
+        };
 
         _cssLivePreviewTimer = new Timer(_ =>
         {
@@ -146,6 +153,7 @@ public partial class EditRouteWindow : Window
             WidgetEvents.WidgetScaleUpdated += OnWidgetScaleUpdated;
             WidgetEvents.WidgetSizeUpdated += OnWidgetSizeUpdated;
             WidgetEvents.SelectEditorWidget += SelectWidgetFromEvent;
+            WidgetEvents.WidgetActionRequested += OnWidgetActionRequested;
         }
     }
 
@@ -191,6 +199,9 @@ public partial class EditRouteWindow : Window
 
     private async Task LoadRouteAsync()
     {
+        WidgetPackPaths.InvalidateVersionCache();
+        await WidgetCatalog.LoadIndexAsync(_factory);
+
         await using var db = await _factory.CreateDbContextAsync();
         _route = await db.Routes
             .Include(r => r.Widgets).ThenInclude(w => w.CssVariables)
@@ -222,7 +233,7 @@ public partial class EditRouteWindow : Window
                 w.Z = index;
             }
             index -= 1;
-            if (!File.Exists(w.HtmlPath))
+            if (!WidgetFiles.Current.Exists(w.HtmlPath))
             {
                 _erroredWidgets.Add(w.Id);
                 _logger?.LogWarning("Widget {Name} ({Id}) file not found: {Path}", w.Name, w.Id, w.HtmlPath);
@@ -405,13 +416,7 @@ public partial class EditRouteWindow : Window
                 return folders.FirstOrDefault()?.Path.LocalPath ?? string.Empty;
             }
 
-            var patterns = type switch
-            {
-                WidgetVariableType.ImageFile => new[] { "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.avif", "*.bmp", "*.svg", "*.ico" },
-                WidgetVariableType.SoundFile => new[] { "*.wav", "*.mp3", "*.ogg", "*.oga", "*.opus", "*.m4a" },
-                WidgetVariableType.VideoFile => new[] { "*.mp4", "*.m4v", "*.webm", "*.ogm", "*.mkv", "*.mov" },
-                _ => new[] { "*.*" }
-            };
+            var patterns = FileVarPatterns(type);
 
             var files = await StorageProvider.OpenFilePickerAsync(new global::Avalonia.Platform.Storage.FilePickerOpenOptions
             {
@@ -426,6 +431,26 @@ public partial class EditRouteWindow : Window
             _logger?.LogError(ex, "Failed to parse filepath");
             return string.Empty;
         }
+    }
+
+    private static string[] FileVarPatterns(WidgetVariableType type) => type switch
+    {
+        WidgetVariableType.ImageFile => ["*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.avif", "*.bmp", "*.svg", "*.ico"],
+        WidgetVariableType.SoundFile => ["*.wav", "*.mp3", "*.ogg", "*.oga", "*.opus", "*.m4a"],
+        WidgetVariableType.VideoFile => ["*.mp4", "*.m4v", "*.webm", "*.ogm", "*.mkv", "*.mov"],
+        _ => ["*.*"]
+    };
+
+    private static bool FileVarAccepts(WidgetVariableType type, string path)
+    {
+        if (type == WidgetVariableType.FolderPath) return Directory.Exists(path);
+        if (!File.Exists(path)) return false;
+
+        var patterns = FileVarPatterns(type);
+        if (patterns.Contains("*.*")) return true;
+
+        string ext = Path.GetExtension(path);
+        return patterns.Any(p => string.Equals(p[1..], ext, StringComparison.OrdinalIgnoreCase));
     }
 
     private static IEnumerable<CheckBox> GetAllCheckBoxes(Panel panel)
@@ -478,8 +503,7 @@ public partial class EditRouteWindow : Window
         {
             var wi = _widgets[i];
             var w = await db.Widgets.FirstOrDefaultAsync(x => x.Id == wi.Id);
-            if (w == null) continue;
-            w.Z = start - i;
+            w?.Z = start - i;
         }
         await db.SaveChangesAsync();
         await LoadRouteAsync();
@@ -495,16 +519,133 @@ public partial class EditRouteWindow : Window
         }
         catch { /**/ }
     }
+    
+    private async void BrowseWidgetsButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_route == null) return;
 
-    private async Task ImportSingleWidgetAsync(string path, AppDbContext db, WidgetEntityHelper helper)
+        var dialog = new WidgetBrowserDialog(async entry =>
+        {
+            string file = WidgetCatalog.ToAbsolutePath(entry.PackPath);
+            return File.Exists(file) && await AddWidgetPackInPlaceAsync(file);
+        });
+
+        await dialog.ShowDialog(this);
+    }
+
+    public async Task<bool> AddWidgetPackInPlaceAsync(string packFile)
+    {
+        if (_route == null) return false;
+
+        try
+        {
+            var mounted = WidgetPackInstaller.MountInPlace(packFile);
+            if (mounted == null)
+            {
+                _logger?.LogError("Could not read widget package {Path}", packFile);
+                return false;
+            }
+
+            await using var db = await _factory.CreateDbContextAsync();
+            var helper = new WidgetEntityHelper(_factory, null);
+
+            var manifest = mounted.Manifest;
+            await ImportSingleWidgetAsync(mounted.HtmlPath, db, helper,
+                manifest.Name, manifest.ScaleX, manifest.ScaleY);
+
+            foreach (var existing in _widgets.ToList())
+                ReseatWidgetCard(existing);
+
+            await RefreshWidgetZIndicesAsync();
+            OverlayEvents.RaiseOverlayRefreshRequested(_route.Id);
+            RefreshWebView();
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to add widget package in place {Path}", packFile);
+            return false;
+        }
+    }
+
+    public async Task<bool> AddWidgetPackAsync(string packPath)
+    {
+        if (_route == null) return false;
+
+        try
+        {
+            await using var db = await _factory.CreateDbContextAsync();
+            var helper = new WidgetEntityHelper(_factory, null);
+
+            bool added = packPath.EndsWith(WidgetCollectionInstaller.CollectionExtension, StringComparison.OrdinalIgnoreCase)
+                ? await ImportWidgetCollectionAsync(packPath, db, helper)
+                : await ImportWidgetPackAsync(packPath, db, helper);
+
+            foreach (var existing in _widgets.ToList())
+                ReseatWidgetCard(existing);
+
+            await RefreshWidgetZIndicesAsync();
+            OverlayEvents.RaiseOverlayRefreshRequested(_route.Id);
+            RefreshWebView();
+
+            return added;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to add widget package {Path}", packPath);
+            return false;
+        }
+    }
+
+    private async Task<bool> ImportWidgetCollectionAsync(string smwcPath, AppDbContext db, WidgetEntityHelper helper)
+    {
+        var collection = WidgetCollectionInstaller.InstallAll(smwcPath);
+        if (collection == null)
+        {
+            _logger?.LogError("Could not read widget collection {Path}", smwcPath);
+            return false;
+        }
+
+        if (collection.Failed > 0)
+            _logger?.LogWarning("Skipped {Count} unreadable package(s) in {Path}", collection.Failed, smwcPath);
+
+        foreach (var pack in collection.Packs)
+        {
+            var manifest = pack.Manifest;
+            await ImportSingleWidgetAsync(pack.HtmlPath, db, helper, manifest.Name, manifest.ScaleX, manifest.ScaleY);
+        }
+
+        return collection.Packs.Count > 0;
+    }
+
+    private async Task<bool> ImportWidgetPackAsync(string smwPath, AppDbContext db, WidgetEntityHelper helper)
+    {
+        var installed = WidgetPackInstaller.Install(smwPath);
+        if (installed == null)
+        {
+            _logger?.LogError("Could not read widget package {Path}", smwPath);
+            return false;
+        }
+
+        var manifest = installed.Manifest;
+        await ImportSingleWidgetAsync(installed.HtmlPath, db, helper, manifest.Name, manifest.ScaleX, manifest.ScaleY);
+        return true;
+    }
+
+    private async Task ImportSingleWidgetAsync(string path, AppDbContext db, WidgetEntityHelper helper,
+        string? displayName = null, float scaleX = 1f, float scaleY = 1f)
     {
         var widgetType = WidgetTypeHelper.DetectFromPath(path);
-        var newWidget = new Widget(Path.GetFileNameWithoutExtension(path), path)
+        var newWidget = new Widget(
+            string.IsNullOrWhiteSpace(displayName) ? Path.GetFileNameWithoutExtension(path) : displayName, path)
         {
             Type = widgetType,
             RouteId = _route!.Id,
             X = 0,
             Y = 0,
+            ScaleX = scaleX > 0 ? scaleX : 1f,
+            ScaleY = scaleY > 0 ? scaleY : 1f,
             Z = _widgets.Count > 0 ? _widgets.Max(x => x.Z) + 1 : 1
         };
 
@@ -648,7 +789,8 @@ public partial class EditRouteWindow : Window
         {
             var s = scale.ToString(CultureInfo.InvariantCulture);
             await PreviewWebView.InvokeScript(
-                $"(function(){{var z={s};if(window.__setPreviewZoom){{window.__setPreviewZoom(z);}}" +
+                $"(function(){{var z={s};if(window.__setPreviewZoom){{" +
+                $"document.documentElement.style.zoom='';window.__setPreviewZoom(z);}}" +
                 $"else{{document.documentElement.style.zoom=z;window.__previewZoom=z;}}}})();");
         }
         catch { /**/ }
@@ -668,6 +810,27 @@ public partial class EditRouteWindow : Window
     private void WebViewBgToggle_Click(object? sender, RoutedEventArgs e)
     {
         _webViewLightBg = WebViewBgToggle.IsChecked != true;
+        ApplyWebViewBgToggle();
+        _ = StateValueHelper.SetAsync(_factory, StateKeys.EditorPreviewLightBg, _webViewLightBg);
+    }
+
+    private void LoadPreviewBgPreference()
+    {
+        try
+        {
+            using var db = _factory.CreateDbContext();
+            _webViewLightBg = StateValueHelper.Get(db, StateKeys.EditorPreviewLightBg, true);
+            ApplyWebViewBgToggle();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Could not read the editor preview background preference");
+        }
+    }
+
+    private void ApplyWebViewBgToggle()
+    {
+        WebViewBgToggle.IsChecked = !_webViewLightBg;
         WebViewBgToggle.Content = _webViewLightBg ? "Light" : "Dark";
         ApplyWebViewBackground(_webViewLightBg);
     }

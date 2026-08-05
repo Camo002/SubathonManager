@@ -1,6 +1,3 @@
-presets/harley/
-presets/honse/
-
 bin/
 obj/
 /packages/
@@ -17,9 +14,18 @@ riderModule.iml
 
 exports/
 imports/
-*.smo
+cache/
 
-# If we set this up
+*.smo
+*.smw
+*.smwc
+
+presets/**
+!presets/
+!presets/**/
+!presets/**/*.smw
+!presets/**/*.smwc
+
 !.idea/codeStyles/
 !.idea/inspectionProfiles/
 !.idea/runConfigurations/

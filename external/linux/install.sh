@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Registers Linux binary as the handler for subathonmanager:// links
-# and .smo overlay files. The app should self-register this already on launch, however, this is to manually set it up if desired or remove it.
+# and .smo + .smw files
+# The app should self-register this already on launch, however, this is to manually set it up if desired or remove it.
 #
 # Usage:
 #   ./install.sh              register using the SubathonManager binary next to this script
@@ -17,6 +18,8 @@ DESKTOP="$APPS/subathonmanager.desktop"
 MIME_XML="$MIME/packages/subathonmanager-overlay.xml"
 SCHEME="x-scheme-handler/subathonmanager"
 OVERLAY="application/x-subathonmanager-overlay"
+WIDGET="application/x-subathonmanager-widget"
+COLLECTION="application/x-subathonmanager-widget-collection"
 ICON_NAME="subathonmanager"
 ICON_SIZES="48 64 128 256"
 
@@ -71,7 +74,7 @@ Terminal=false
 NoDisplay=false
 Categories=Utility;
 StartupWMClass=SubathonManager
-MimeType=$OVERLAY;$SCHEME;
+MimeType=$OVERLAY;$WIDGET;$COLLECTION;$SCHEME;
 EOF
 
 cat > "$MIME_XML" <<EOF
@@ -79,7 +82,18 @@ cat > "$MIME_XML" <<EOF
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
   <mime-type type="$OVERLAY">
     <comment>Subathon Manager Overlay</comment>
+    <icon name="$ICON_NAME"/>
     <glob pattern="*.smo"/>
+  </mime-type>
+  <mime-type type="$WIDGET">
+    <comment>Subathon Manager Widget</comment>
+    <icon name="$ICON_NAME"/>
+    <glob pattern="*.smw"/>
+  </mime-type>
+  <mime-type type="$COLLECTION">
+    <comment>Subathon Manager Widget Collection</comment>
+    <icon name="$ICON_NAME"/>
+    <glob pattern="*.smwc"/>
   </mime-type>
 </mime-info>
 EOF
@@ -88,6 +102,8 @@ update-mime-database "$MIME" >/dev/null 2>&1 || true
 update-desktop-database "$APPS" >/dev/null 2>&1 || true
 xdg-mime default subathonmanager.desktop "$SCHEME"
 xdg-mime default subathonmanager.desktop "$OVERLAY"
+xdg-mime default subathonmanager.desktop "$WIDGET"
+xdg-mime default subathonmanager.desktop "$COLLECTION"
 
 echo "installed:"
 echo "  $DESKTOP  ->  $BIN"

@@ -9,6 +9,7 @@ using SubathonManager.Core.Models;
 using SubathonManager.Core;
 using SubathonManager.Core.Events;
 using SubathonManager.Core.Interfaces;
+using SubathonManager.Server.Interfaces;
 
 namespace SubathonManager.Server;
 
@@ -86,6 +87,7 @@ public partial class WebServer : IAppService
         _routes.Add((new RouteKey("GET", "/ws"),HandleWebSocketRequestAsync));
         _routes.Add((new RouteKey("GET", "/widget/"),HandleWidgetRequest ));
         _routes.Add((new RouteKey("GET", "/route/"),HandleRouteRequest ));
+        _routes.Add((new RouteKey("GET", ResourcePaths.UrlPrefix),HandleResourceRequest ));
     }
 
     public async Task StartAsync(CancellationToken cancellationToken = default)

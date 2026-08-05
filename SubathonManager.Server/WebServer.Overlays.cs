@@ -4,7 +4,10 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using SubathonManager.Core;
 using SubathonManager.Core.Enums;
+using SubathonManager.Core.Interfaces;
+using SubathonManager.Server.Interfaces;
 
 namespace SubathonManager.Server;
 
@@ -59,11 +62,11 @@ public partial class WebServer
                         ? widget.HtmlPath
                         : Path.Combine(folder, relativePath.Replace('/', Path.DirectorySeparatorChar));
 
-                    if (File.Exists(filePath))
+                    if (WidgetFiles.Current.Exists(filePath))
                     {
                         if (Path.GetExtension(filePath).Equals(".html", StringComparison.OrdinalIgnoreCase))
                         {
-                            string html = await File.ReadAllTextAsync(filePath);
+                            string html = WidgetFiles.Current.ReadAllText(filePath) ?? string.Empty;
 
                             var cssOverrides = new StringBuilder();
                             cssOverrides.AppendLine(GetWebsocketInjectionScript());
@@ -153,13 +156,37 @@ public partial class WebServer
                             await ctx.WriteResponse(200, html, true, "text/html");
                             return;
                         }
-                        await ctx.ServeFile(filePath, GetContentType(filePath));
-                        return;
+
+                        var realPath = WidgetFiles.Current.GetRealFilePath(filePath);
+                        if (realPath != null)
+                        {
+                            await ctx.ServeFile(realPath, GetContentType(filePath));
+                            return;
+                        }
+
+                        var bytes = WidgetFiles.Current.ReadAllBytes(filePath);
+                        if (bytes != null)
+                        {
+                            await ctx.ServeBytes(bytes, GetContentType(filePath));
+                            return;
+                        }
                     }
                 }
             }
         }
         await ctx.WriteResponse(404, "Widget not found");
+    }
+
+    internal async Task HandleResourceRequest(IHttpContext ctx)
+    {
+        var filePath = ResourcePaths.ResolveRequestPath(ctx.Path);
+        if (filePath != null)
+        {
+            await ctx.ServeFile(filePath, GetContentType(filePath));
+            return;
+        }
+
+        await ctx.WriteResponse(404, "Resource not found");
     }
 
     internal async Task HandleRouteRequest(IHttpContext ctx)
@@ -189,6 +216,68 @@ public partial class WebServer
         }
         await ctx.WriteResponse(404, "Route/Overlay not found");
     }
+
+    private static string BuildWidgetContextMenuScript() => @"
+    <script>
+    (function () {
+        const actions = [
+            { label: 'Refresh', action: 'Refresh' },
+            { label: 'Toggle Visibility', action: 'ToggleVisibility' },
+            { label: 'Reset Scale', action: 'ResetScale'},
+            { label: 'Clone', action: 'Clone' },
+            { label: 'Delete', action: 'Delete', danger: true }
+        ];
+
+        const menu = document.createElement('div');
+        menu.style.cssText = 'position:fixed;z-index:100000;display:none;background:#222;color:#eee;' +
+            'border:1px solid #555;border-radius:6px;padding:4px;font:12px sans-serif;' +
+            'box-shadow:0 4px 14px rgba(0,0,0,0.5);user-select:none;min-width:150px;';
+        document.body.appendChild(menu);
+
+        let targetId = null;
+        function hideMenu() { menu.style.display = 'none'; targetId = null; }
+
+        actions.forEach(entry => {
+            const item = document.createElement('div');
+            item.textContent = entry.label;
+            item.style.cssText = 'padding:6px 12px;cursor:pointer;border-radius:4px;white-space:nowrap;' +
+                (entry.danger ? 'color:#ff8a80;' : '');
+            item.onmouseenter = () => item.style.background = entry.danger ? '#7f1d1d' : '#3a6ea5';
+            item.onmouseleave = () => item.style.background = 'transparent';
+
+            item.addEventListener('click', async e => {
+                e.stopPropagation();
+                const id = targetId;
+                hideMenu();
+                if (!id) return;
+
+                await fetch('/api/widget-action/' + id, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: entry.action })
+                });
+            });
+
+            menu.appendChild(item);
+        });
+
+        document.addEventListener('click', hideMenu);
+        document.addEventListener('scroll', hideMenu, true);
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') hideMenu(); });
+
+        document.querySelectorAll('.widget-chrome').forEach(chrome => {
+            chrome.addEventListener('contextmenu', e => {
+                e.preventDefault();
+                e.stopPropagation();
+                targetId = chrome.dataset.id;
+                menu.style.display = 'block';
+                menu.style.left = Math.min(e.clientX, window.innerWidth - menu.offsetWidth - 8) + 'px';
+                menu.style.top = Math.min(e.clientY, window.innerHeight - menu.offsetHeight - 8) + 'px';
+            });
+        });
+    })();
+    </script>
+    ";
 
     private string GenerateMergedPage(Core.Models.Route route, bool isEditor = false)
     {
@@ -775,6 +864,8 @@ public partial class WebServer
             }});
             </script>
             ");
+
+            sb.AppendLine(BuildWidgetContextMenuScript());
         }
 
         sb.AppendLine("</body></html>");

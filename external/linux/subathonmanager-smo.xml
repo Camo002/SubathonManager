@@ -2,6 +2,17 @@
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
   <mime-type type="application/x-subathonmanager-overlay">
     <comment>Subathon Manager Overlay</comment>
+    <icon name="subathonmanager"/>
     <glob pattern="*.smo"/>
+  </mime-type>
+  <mime-type type="application/x-subathonmanager-widget">
+    <comment>Subathon Manager Widget</comment>
+    <icon name="subathonmanager"/>
+    <glob pattern="*.smw"/>
+  </mime-type>
+  <mime-type type="application/x-subathonmanager-widget-collection">
+    <comment>Subathon Manager Widget Collection</comment>
+    <icon name="subathonmanager"/>
+    <glob pattern="*.smwc"/>
   </mime-type>
 </mime-info>
