@@ -232,20 +232,40 @@ public class WidgetCollectionInstallerTests
         Assert.Equal(0, result.Failed);
     }
 
+    private static bool TryListScratchDirs(out HashSet<string> dirs)
+    {
+        try
+        {
+            dirs = Directory.EnumerateDirectories(Path.GetTempPath(), "smwc-*").ToHashSet();
+            return true;
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException)
+        {
+            dirs = [];
+            return false;
+        }
+    }
+
     [Fact]
     public void InstallAll_LeavesNoScratchFolderBehind()
     {
         using var ws = new TempWorkspace("collection");
-        var before = Directory.EnumerateDirectories(Path.GetTempPath(), "smwc-*").ToHashSet();
-
-        string path = TestPacks.WriteZip(ws.Path_("kit.smwc"), new List<KeyValuePair<string, byte[]>>
+        if (!TryListScratchDirs(out var before))
         {
-            SmwEntry("timer.smw", "wolf.widgets.timer", "1.0.0")
-        });
-        WidgetCollectionInstaller.InstallAll(path);
+            Assert.Skip($"Temp root '{Path.GetTempPath()}' is not enumerable on this machine.");
+        }
+        else
+        {
+            string path = TestPacks.WriteZip(ws.Path_("kit.smwc"),
+                new List<KeyValuePair<string, byte[]>>
+                {
+                    SmwEntry("timer.smw", "wolf.widgets.timer", "1.0.0")
+                });
+            WidgetCollectionInstaller.InstallAll(path);
 
-        var after = Directory.EnumerateDirectories(Path.GetTempPath(), "smwc-*").ToHashSet();
-        Assert.Empty(after.Except(before));
+            Assert.True(TryListScratchDirs(out var after));
+            Assert.Empty(after.Except(before));
+        }
     }
 
     #endregion
