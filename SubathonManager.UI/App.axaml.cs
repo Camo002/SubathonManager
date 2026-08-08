@@ -202,6 +202,9 @@ public partial class App : Application
                 case Platform.ActivationKind.OAuth:
                     ProtocolParser.Parse([request.Payload]);
                     break;
+                default:
+                    _logger?.LogDebug("Activation received with no recognised payload: {Payload}", request.Payload);
+                    break;
             }
             DispatchToMainWindow(request.Kind);
         });

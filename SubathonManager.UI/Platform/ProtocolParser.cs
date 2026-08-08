@@ -33,34 +33,64 @@ public static class ProtocolParser
 
         var uri = new Uri(arg);
 
-        if (arg.Contains(".smo", StringComparison.OrdinalIgnoreCase) && uri.Host != "oauth")
-        {
-            var query = HttpUtility.ParseQueryString(uri.Query);
-            var url = query["url"];
-            if (!string.IsNullOrEmpty(url))
-            {
-                Utils.PendingOverlayImportPath = url;
-                return new ActivationRequest(ActivationKind.SmoFile, url);
-            }
-        }
-        else if (uri.Host == "oauth")
+        if (uri.Host == "oauth")
         {
             var provider = uri.AbsolutePath.TrimStart('/');
-            var query = HttpUtility.ParseQueryString(uri.Query);
+            var oauthQuery = HttpUtility.ParseQueryString(uri.Query);
 
             Utils.PendingOAuthCallback = new OAuthCallback
             {
                 Provider = provider,
-                AccessToken = query["access_token"] ?? "",
-                RefreshToken = query["refresh_token"] ?? "",
-                Code = query["code"] ?? "",
-                Error = query["error"] ?? "",
-                ExpiresIn = query["expires_in"] ?? "",
-                ClientId = query["client_id"] ?? ""
+                AccessToken = oauthQuery["access_token"] ?? "",
+                RefreshToken = oauthQuery["refresh_token"] ?? "",
+                Code = oauthQuery["code"] ?? "",
+                Error = oauthQuery["error"] ?? "",
+                ExpiresIn = oauthQuery["expires_in"] ?? "",
+                ClientId = oauthQuery["client_id"] ?? ""
             };
             return new ActivationRequest(ActivationKind.OAuth, arg);
         }
 
-        return new ActivationRequest(ActivationKind.Unknown, arg);
+        var query = HttpUtility.ParseQueryString(uri.Query);
+        var url = query["url"];
+        if (string.IsNullOrEmpty(url))
+            return new ActivationRequest(ActivationKind.Unknown, arg);
+
+        var kind = ClassifyPack(url);
+        if (kind == ActivationKind.Unknown) kind = ClassifyPack(uri.AbsolutePath);
+        if (kind == ActivationKind.Unknown) kind = ClassifyHost(uri.Host);
+
+        switch (kind)
+        {
+            case ActivationKind.SmoFile:
+                Utils.PendingOverlayImportPath = url;
+                return new ActivationRequest(ActivationKind.SmoFile, url);
+            case ActivationKind.SmwFile:
+                Utils.PendingWidgetPackImportPath = url;
+                return new ActivationRequest(ActivationKind.SmwFile, url);
+            default:
+                return new ActivationRequest(ActivationKind.Unknown, arg);
+        }
     }
+
+    private static ActivationKind ClassifyPack(string value)
+    {
+        var path = value;
+        int cut = path.IndexOfAny(['?', '#']);
+        if (cut >= 0) path = path[..cut];
+
+        if (path.EndsWith(".smo", StringComparison.OrdinalIgnoreCase))
+            return ActivationKind.SmoFile;
+        if (path.EndsWith(".smw", StringComparison.OrdinalIgnoreCase) ||
+            path.EndsWith(".smwc", StringComparison.OrdinalIgnoreCase))
+            return ActivationKind.SmwFile;
+        return ActivationKind.Unknown;
+    }
+
+    private static ActivationKind ClassifyHost(string host) => host.ToLowerInvariant() switch
+    {
+        "overlay" or "smo" => ActivationKind.SmoFile,
+        "widget" or "widgets" or "smw" or "smwc" or "collection" => ActivationKind.SmwFile,
+        _ => ActivationKind.Unknown
+    };
 }

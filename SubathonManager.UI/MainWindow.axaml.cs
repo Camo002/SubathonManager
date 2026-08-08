@@ -32,6 +32,7 @@ public partial class MainWindow : Window
         {
             await MaybeShowTelemetryPromptAsync();
             await ImportPendingOverlayAsync();
+            await CollectPendingWidgetPackAsync();
         };
     }
 
@@ -49,7 +50,7 @@ public partial class MainWindow : Window
                 _ = ImportPendingOverlayAsync();
                 break;
             case ActivationKind.SmwFile:
-                CollectPendingWidgetPack();
+                _ = CollectPendingWidgetPackAsync();
                 break;
         }
     }
@@ -65,11 +66,18 @@ public partial class MainWindow : Window
         Utils.PendingOverlayImportPath = null;
     }
     
-    private void CollectPendingWidgetPack()
+    private async Task CollectPendingWidgetPackAsync()
     {
         var path = Utils.PendingWidgetPackImportPath;
         Utils.PendingWidgetPackImportPath = null;
         if (string.IsNullOrWhiteSpace(path)) return;
+
+        if (path.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+        {
+            var downloaded = await DownloadWidgetPackAsync(path);
+            if (downloaded == null) return;
+            path = downloaded;
+        }
 
         var editor = FindOpenOverlayEditor();
         if (editor != null)
@@ -90,6 +98,38 @@ public partial class MainWindow : Window
             _logger?.LogWarning("Failed to collect widget package {Path}", path);
         else
             _logger?.LogDebug("Collected widget package {Path}", installed);
+    }
+
+    private async Task<string?> DownloadWidgetPackAsync(string url)
+    {
+        try
+        {
+            using var client = new HttpClient();
+            using var response = await client.GetAsync(url);
+            response.EnsureSuccessStatusCode();
+
+            string fileName = response.Content.Headers.ContentDisposition?.FileNameStar
+                              ?? response.Content.Headers.ContentDisposition?.FileName?.Trim('"')
+                              ?? Uri.UnescapeDataString(Path.GetFileName(new Uri(url).AbsolutePath));
+
+            if (string.IsNullOrWhiteSpace(fileName)) fileName = "imported_widget";
+            foreach (var invalid in Path.GetInvalidFileNameChars())
+                fileName = fileName.Replace(invalid, '_');
+
+            if (!fileName.EndsWith(WidgetPackPaths.PackExtension, StringComparison.OrdinalIgnoreCase) &&
+                !fileName.EndsWith(WidgetCollectionInstaller.CollectionExtension, StringComparison.OrdinalIgnoreCase))
+                fileName += WidgetPackPaths.PackExtension;
+
+            string tempFile = Path.Combine(Path.GetTempPath(), fileName);
+            await File.WriteAllBytesAsync(tempFile, await response.Content.ReadAsByteArrayAsync());
+            _logger?.LogDebug("Downloaded widget package {Url} to {Path}", url, tempFile);
+            return tempFile;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to download widget package {Url}", url);
+            return null;
+        }
     }
 
     private static EditRouteWindow? FindOpenOverlayEditor()
