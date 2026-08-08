@@ -67,6 +67,7 @@ public partial class EditRouteWindow : Window
         Environment.SetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--autoplay-policy=no-user-gesture-required");
         _factory = AppServices.Provider.GetRequiredService<IDbContextFactory<AppDbContext>>();
         InitializeComponent();
+        UiUtils.WindowIcons.Apply(this);
         EditorRouteId = routeId;
         WidgetsList.ItemsSource = _widgets;
         BrowserEditorButton.IsVisible = OperatingSystem.IsLinux();

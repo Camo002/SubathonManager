@@ -27,6 +27,7 @@ public partial class ExportOverlayDialog : Window
     public ExportOverlayDialog()
     {
         InitializeComponent();
+        UiUtils.WindowIcons.Apply(this);
     }
 
     public ExportOverlayDialog(Route route)
@@ -39,6 +40,7 @@ public partial class ExportOverlayDialog : Window
             .FirstOrDefault(r => r.Id == route.Id);
 
         InitializeComponent();
+        UiUtils.WindowIcons.Apply(this);
 
         if (_route == null)
         {

@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        UiUtils.WindowIcons.Apply(this);
 
         VersionText.Text = _fullVersion.Length > 8 ? _fullVersion[..8] + "‥" : _fullVersion;
         ToolTip.SetTip(VersionLabelBtn, _fullVersion);

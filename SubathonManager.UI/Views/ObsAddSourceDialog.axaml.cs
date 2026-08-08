@@ -17,6 +17,7 @@ public partial class ObsAddSourceDialog : Window
     public ObsAddSourceDialog()
     {
         InitializeComponent();
+        UiUtils.WindowIcons.Apply(this);
         _route = new Route();
         _url = string.Empty;
     }
@@ -24,6 +25,7 @@ public partial class ObsAddSourceDialog : Window
     public ObsAddSourceDialog(Route route, string url, List<string> scenes, string currentScene)
     {
         InitializeComponent();
+        UiUtils.WindowIcons.Apply(this);
         _route = route;
         _url = url;
 

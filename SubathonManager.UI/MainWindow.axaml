@@ -10,7 +10,6 @@
         xmlns:v="using:SubathonManager.UI.Validation"
         x:Class="SubathonManager.UI.MainWindow"
         Title="Subathon Manager"
-        Icon="/Assets/icon.png"
         Width="1200" Height="800"
         MinWidth="1200" MinHeight="800"
         CanResize="False"

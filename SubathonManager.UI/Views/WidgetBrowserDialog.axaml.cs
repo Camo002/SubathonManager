@@ -40,6 +40,7 @@ public partial class WidgetBrowserDialog : Window
     public WidgetBrowserDialog(Func<WidgetCatalogEntry, Task<bool>>? onAdd)
     {
         InitializeComponent();
+        UiUtils.WindowIcons.Apply(this);
         SectionsList.ItemsSource = _sections;
 
         _onAdd = onAdd;
@@ -258,6 +259,22 @@ public partial class WidgetBrowserDialog : Window
     private async void Refresh_Click(object? sender, RoutedEventArgs e) => await RefreshAsync();
 
     private void Close_Click(object? sender, RoutedEventArgs e) => Close();
+
+    private void OpenCommunityWidgets_Click(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "https://docs.subathonmanager.app/latest/browse-widgets/",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to open the widgets browser page");
+        }
+    }
 
     private void SetStatus(string text) => StatusText.Text = text;
 

@@ -30,6 +30,7 @@ public partial class ExportWidgetDialog : Window
     public ExportWidgetDialog()
     {
         InitializeComponent();
+        UiUtils.WindowIcons.Apply(this);
     }
 
     public ExportWidgetDialog(Widget widget)
@@ -42,6 +43,7 @@ public partial class ExportWidgetDialog : Window
             .FirstOrDefault(w => w.Id == widget.Id);
 
         InitializeComponent();
+        UiUtils.WindowIcons.Apply(this);
 
         if (_widget == null)
         {
