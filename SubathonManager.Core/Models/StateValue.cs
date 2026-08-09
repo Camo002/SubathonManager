@@ -14,4 +14,9 @@ public class StateValue
 public static class StateKeys
 {
     public const string WheelSpinsOwed = "WheelSpinsOwed";
+    
+    public const string WidgetBrowserCollapsed = "WidgetBrowserCollapsed";
+    public const string WidgetBrowserSkipDeleteConfirm = "WidgetBrowserSkipDeleteConfirm";
+    public const string WidgetBrowserAllVersions = "WidgetBrowserAllVersions";
+    public const string EditorPreviewLightBg = "EditorPreviewLightBg";
 }

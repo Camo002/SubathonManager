@@ -379,11 +379,7 @@ public class EventService: IDisposable, IAppService
         db.Entry(subathon).State = EntityState.Detached;
 
         if (affected > 0 || (ev.ProcessedToSubathon))
-        {
-            var totals = await GetSubathonTotalsAsync(db);
-            if (totals != null)
-                SubathonEvents.RaiseSubathonTotalsUpdated(totals);
-        }
+            await RaiseAllTotalsUpdatedAsync(db);
 
         return (affected > 0 || (ev.ProcessedToSubathon), false);
     }
@@ -720,10 +716,8 @@ public class EventService: IDisposable, IAppService
         events.Add(ev);
         SubathonEvents.RaiseSubathonEventsDeleted(events);
         
-        var totals = await GetSubathonTotalsAsync(db);
-        if (totals != null)
-            SubathonEvents.RaiseSubathonTotalsUpdated(totals);
-        
+        await RaiseAllTotalsUpdatedAsync(db);
+
         if (affected > 0)
         {
             await db.Entry(subathon!).ReloadAsync();
@@ -852,9 +846,7 @@ public class EventService: IDisposable, IAppService
         }
         finally
         {
-            var totals = await GetSubathonTotalsAsync(db);
-            if (totals != null)
-                SubathonEvents.RaiseSubathonTotalsUpdated(totals);
+            await RaiseAllTotalsUpdatedAsync(db);
         }
     }
 
@@ -1009,6 +1001,84 @@ public class EventService: IDisposable, IAppService
             Simulated = simData
         };
         return totals;
+    }
+
+    private static string GetSubTierKey(EventProjection e)
+    {
+        var meta = !string.IsNullOrWhiteSpace(e.EventTypeMeta) ? e.EventTypeMeta
+            : string.IsNullOrWhiteSpace(e.Value) ? "DEFAULT" : e.Value;
+        return e.EventType == null ? meta : e.EventType.Value.TierMetaDisplayName(meta);
+    }
+
+    public static async Task<SubscriptionTotals?> GetSubscriptionTotalsAsync(AppDbContext db)
+    {
+        var subathon = await db.SubathonDatas
+            .AsNoTracking()
+            .Select(x => new { x.Id, x.IsActive })
+            .FirstOrDefaultAsync(x => x.IsActive);
+
+        if (subathon == null) return new SubscriptionTotals();
+
+        var subEventTypes = SubathonEventSubTypeHelper.SubEventTypes
+            .Select(t => (SubathonEventType?)t)
+            .ToList();
+
+        var allEvents = await db.SubathonEvents
+            .AsNoTracking()
+            .Where(e =>
+                e.SubathonId == subathon.Id &&
+                e.ProcessedToSubathon &&
+                subEventTypes.Contains(e.EventType))
+            .Select(e => new EventProjection(
+                e.EventType,
+                e.Source,
+                e.Amount,
+                e.Value,
+                e.Source == SubathonEventSource.Simulated ||
+                e.User!.StartsWith("SIMULATED") ||
+                e.User!.StartsWith("SYSTEM"),
+                e.EventTypeMeta
+            ))
+            .ToListAsync();
+
+        var events = allEvents.Where(e => !e.IsSimulated).ToList();
+        var simEvents = allEvents.Where(e => e.IsSimulated).ToList();
+
+        static Dictionary<SubathonEventType, int> ByEvent(List<EventProjection> src) => src
+            .GroupBy(e => e.EventType!.Value)
+            .ToDictionary(g => g.Key, g => g.Sum(e => e.Amount));
+
+        static Dictionary<SubathonEventType, Dictionary<string, int>> ByEventTier(List<EventProjection> src) => src
+            .GroupBy(e => e.EventType!.Value)
+            .ToDictionary(
+                g => g.Key,
+                g => g.GroupBy(GetSubTierKey)
+                    .ToDictionary(t => t.Key, t => t.Sum(e => e.Amount)));
+
+        return new SubscriptionTotals
+        {
+            SubTotal = events.Sum(e => e.Amount),
+            SubTotalByEvent = ByEvent(events),
+            SubTotalByEventTier = ByEventTier(events),
+
+            Simulated = new SubscriptionSimulatedTotals
+            {
+                SubTotal = simEvents.Sum(e => e.Amount),
+                SubTotalByEvent = ByEvent(simEvents),
+                SubTotalByEventTier = ByEventTier(simEvents)
+            }
+        };
+    }
+
+    public static async Task RaiseAllTotalsUpdatedAsync(AppDbContext db)
+    {
+        var totals = await GetSubathonTotalsAsync(db);
+        if (totals != null)
+            SubathonEvents.RaiseSubathonTotalsUpdated(totals);
+
+        var subTotals = await GetSubscriptionTotalsAsync(db);
+        if (subTotals != null)
+            SubathonEvents.RaiseSubscriptionTotalsUpdated(subTotals);
     }
 
     public async Task StopAsync(CancellationToken ct = default)
