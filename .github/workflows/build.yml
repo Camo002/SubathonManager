@@ -82,9 +82,10 @@ jobs:
           --configuration Release \
           --reporter "console;verbosity=detailed" \
           --reporter "trx;LogFileName=test-results.trx" \
-          --collect:"XPlat Code Coverage" \
+          /p:CollectCoverage=true \
+          /p:CoverletOutputFormat=cobertura \
           --results-directory ./coverage \
-          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.ExcludeByFile="**/Migrations/**;**/*.g.cs;**/SubathonManager.UI/**"
+          /p:ExcludeByFile="**/Migrations/**%3b**/*.g.cs%3b**/SubathonManager.UI/**"
 
       - name: List raw coverage files
         if: always()
