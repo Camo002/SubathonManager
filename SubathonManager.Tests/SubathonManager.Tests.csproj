@@ -9,6 +9,7 @@
     <NoWarn>$(NoWarn);CS8981</NoWarn>
     <AssemblyName>SubathonManager.Tests</AssemblyName>
     <OutputType>Exe</OutputType>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
   </PropertyGroup>
 
   <ItemGroup>
