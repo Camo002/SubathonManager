@@ -74,7 +74,7 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Restore dependencies
-        run: dotnet restore SubathonManager.Tests/SubathonManager.Tests.csproj -p:EnableWindowsTargeting=true
+        run: dotnet restore Subathon.Tests/Subathon.Tests.csproj 
 
       - name: Run tests
         run: |
