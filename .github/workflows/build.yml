@@ -82,6 +82,7 @@ jobs:
           --configuration Release \
           --logger "console;verbosity=detailed" \
           --logger "trx;LogFileName=test-results.trx" \
+          /p:UseDataCollection=false \
           /p:CollectCoverage=true \
           /p:CoverletOutputFormat=cobertura \
           /p:CoverletOutput=./coverage/ \
