@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.12.35527.113
+# Visual Studio Version 18
+VisualStudioVersion = 18.9.12105.275 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SubathonManager.Server", "SubathonManager.Server\SubathonManager.Server.csproj", "{6B4F72B2-4DB9-4BE4-9BEF-31AD453C1F20}"
 EndProject
@@ -13,7 +13,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SubathonManager.Integration
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SubathonManager.Services", "SubathonManager.Services\SubathonManager.Services.csproj", "{736A0E78-9758-4E3B-AEE2-85BE7BC114A1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SubathonManager.Tests", "SubathonManager.Tests\SubathonManager.Tests.csproj", "{B2B12A03-3D8A-42AF-BA7B-26F30235B635}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Subathon.Tests", "SubathonManager.Tests\Subathon.Tests.csproj", "{B2B12A03-3D8A-42AF-BA7B-26F30235B635}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SubathonManager.UI", "SubathonManager.UI\SubathonManager.UI.csproj", "{049927EF-790D-414A-8D34-BEF516C5B087}"
 EndProject
