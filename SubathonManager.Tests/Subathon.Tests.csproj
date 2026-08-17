@@ -7,7 +7,7 @@
     <IsPackable>false</IsPackable>
     <NoWarn>$(NoWarn);NU1701</NoWarn>
     <NoWarn>$(NoWarn);CS8981</NoWarn>
-    <AssemblyName>SubathonManager.Tests</AssemblyName>
+    <AssemblyName>Subathon.Tests</AssemblyName>
     <OutputType>Exe</OutputType>
   </PropertyGroup>
 
