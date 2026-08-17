@@ -72,7 +72,6 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
           restore-keys: |
             nuget-${{ runner.os }}-
-
       - name: Restore dependencies
         run: dotnet restore SubathonManager.Tests/SubathonManager.Tests.csproj -p:EnableWindowsTargeting=true
 
@@ -80,13 +79,11 @@ jobs:
         run: |
           dotnet test SubathonManager.Tests/SubathonManager.Tests.csproj \
           --configuration Release \
-          --reporter "console;verbosity=detailed" \
-          --reporter "trx;LogFileName=test-results.trx" \
-          /p:CollectCoverage=true \
-          /p:CoverletOutputFormat=cobertura \
+          --logger "console;verbosity=detailed" \
+          --logger "trx;LogFileName=test-results.trx" \
+          --collect:"XPlat Code Coverage" \
           --results-directory ./coverage \
-          /p:ExcludeByFile="**/Migrations/**%3b**/*.g.cs%3b**/SubathonManager.UI/**"
-
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.ExcludeByFile="**/Migrations/**;**/*.g.cs;**/SubathonManager.UI/**"
       - name: List raw coverage files
         if: always()
         shell: bash
@@ -119,7 +116,6 @@ jobs:
         shell: bash
         run: |
           shopt -s globstar nullglob
-
           line_rate=""; branch_rate=""
           if [ -f coverage-merged/Cobertura.xml ]; then
             line_rate=$(sed -n 's/.*<coverage[^>]*line-rate="\([0-9.]*\)".*/\1/p' coverage-merged/Cobertura.xml | head -n1)
@@ -128,7 +124,6 @@ jobs:
           pct() { [ -z "$1" ] && echo "n/a" || awk -v r="$1" 'BEGIN{printf "%.1f%%", r*100}'; }
           echo "line_rate=$(pct "$line_rate")" >> "$GITHUB_OUTPUT"
           echo "branch_rate=$(pct "$branch_rate")" >> "$GITHUB_OUTPUT"
-
           total=0; passed=0; failed=0; skipped=0
           for f in coverage/**/*.trx; do
             counters=$(tr -d '\n' < "$f" | sed -n 's/.*<Counters \([^>]*\)>.*/\1/p')
@@ -149,7 +144,6 @@ jobs:
             echo "tests_failed=$failed"
             echo "tests_skipped=$skipped"
           } >> "$GITHUB_OUTPUT"
-
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v7
@@ -183,13 +177,11 @@ jobs:
           else
             WIN=true; LINUX=true; ARM=true; INTEL=true
           fi
-
           include=()
           [ "$WIN" = "true" ]   && include+=('{"os":"windows-latest","runtime":"win-x64","single":"true"}')
           [ "$LINUX" = "true" ] && include+=('{"os":"ubuntu-latest","runtime":"linux-x64","single":"true"}')
           [ "$ARM" = "true" ]   && include+=('{"os":"macos-latest","runtime":"osx-arm64","single":"false"}')
           [ "$INTEL" = "true" ] && include+=('{"os":"macos-latest","runtime":"osx-x64","single":"false"}')
-
           joined=$(IFS=,; echo "${include[*]}")
           echo "matrix={\"include\":[$joined]}" >> "$GITHUB_OUTPUT"
           if [ ${#include[@]} -eq 0 ]; then
@@ -198,7 +190,6 @@ jobs:
             echo "has_targets=true" >> "$GITHUB_OUTPUT"
           fi
           echo "Selected matrix: {\"include\":[$joined]}"
-
   build-avalonia:
     name: Build Avalonia App (${{ matrix.runtime }})
     if: needs.avalonia-matrix.outputs.has_targets == 'true'
@@ -228,7 +219,6 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
           restore-keys: |
             nuget-${{ runner.os }}-
-
       - name: Restore dependencies
         run: dotnet restore SubathonManager.UI/SubathonManager.UI.csproj
 
@@ -257,14 +247,12 @@ jobs:
           else
             echo "file_version=0.0.0.0" >> $GITHUB_OUTPUT
           fi
-
       - name: Inject telemetry key
         shell: bash
         run: |
           sed -i.bak 's/BUILD_TELEMETRY_KEY/${{ secrets.TELEMETRY_KEY }}/g' \
             SubathonManager.Services/TelemetryService.cs
           rm -f SubathonManager.Services/TelemetryService.cs.bak
-
       - name: Publish Avalonia (${{ matrix.runtime }})
         run: >
           dotnet publish SubathonManager.UI/SubathonManager.UI.csproj
@@ -279,7 +267,6 @@ jobs:
           -p:InformationalVersion=${{ steps.avars.outputs.version }}
           -p:Copyright="© 2025–${{ env.CopyrightYear }} WolfwithSword and contributors"
           -o build-avalonia
-
       - name: Copy presets, resources folder and license into build output
         shell: bash
         run: |
@@ -288,7 +275,6 @@ jobs:
           cp -R resources/. build-avalonia/resources/
           cp LICENSE build-avalonia/
           rm -f build-avalonia/*.pdb
-
       - name: Generate hicolor icon sizes (linux)
         if: matrix.runtime == 'linux-x64'
         shell: bash
@@ -305,7 +291,6 @@ jobs:
               "build-avalonia/Assets/icon_${size}.png"
           done
           ls -l build-avalonia/Assets/icon_*.png
-
       - name: Bundle Linux association helper (linux)
         if: matrix.runtime == 'linux-x64'
         shell: bash
@@ -313,14 +298,12 @@ jobs:
           mkdir -p build-avalonia/linux
           cp external/linux/install.sh external/linux/subathonmanager-smo.xml build-avalonia/linux/
           chmod +x build-avalonia/linux/install.sh
-
       - name: Zip build (linux)
         if: matrix.runtime == 'linux-x64'
         shell: bash
         run: |
           cd build-avalonia
           zip -r ../SubathonManager_${{ matrix.runtime }}_${{ steps.avars.outputs.suffix }}.zip .
-
       - name: Assemble macOS .app bundle and zip (macOS only)
         if: startsWith(matrix.runtime, 'osx')
         shell: bash
@@ -330,7 +313,6 @@ jobs:
           cp external/macos/README.txt bundle/
           cd bundle
           zip -ry ../SubathonManager_${{ matrix.runtime }}_${{ steps.avars.outputs.suffix }}.zip SubathonManager.app READ-ME-FIRST.txt
-
       - name: Zip build (windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
@@ -344,7 +326,6 @@ jobs:
           else
             echo "NC_UPLOAD_PATH=build-avalonia" >> "$GITHUB_ENV"
           fi
-
       - name: Decide artifact storage
         shell: bash
         run: |
@@ -364,7 +345,6 @@ jobs:
           echo "PRIMARY=$PRIMARY" >> "$GITHUB_ENV"
           echo "ALLOW_FALLBACK=$ALLOW_FALLBACK" >> "$GITHUB_ENV"
           echo "Storage: primary=$PRIMARY fallback=$ALLOW_FALLBACK"
-
       - name: Upload build artifact (GitHub)
         id: gh
         if: ${{ env.PRIMARY == 'github' }}
@@ -393,7 +373,6 @@ jobs:
         run: |
           echo "SubathonManager_${{ matrix.runtime }}_${{ steps.avars.outputs.suffix }}|${{ steps.nc.outputs.SHAREABLE_URL }}" \
             > "ncmeta-${{ matrix.runtime }}.txt"
-
       - name: Upload Nextcloud manifest
         if: ${{ steps.nc.outcome == 'success' }}
         uses: actions/upload-artifact@v7
@@ -420,7 +399,6 @@ jobs:
             "${{ matrix.runtime }}" "$STATUS" "$STORAGE" "$URL" \
             > "buildmeta-${{ matrix.runtime }}.txt"
           cat "buildmeta-${{ matrix.runtime }}.txt"
-
       - name: Upload build status manifest
         if: always()
         uses: actions/upload-artifact@v7
@@ -454,7 +432,6 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
           restore-keys: |
             nuget-${{ runner.os }}-
-
       - name: Restore dependencies
         run: dotnet restore SubathonManager.UI/SubathonManager.UI.csproj
 
@@ -467,7 +444,6 @@ jobs:
           -p:PublishSingleFile=false
           -p:PublishTrimmed=false
           -o build-pr
-
       - name: Copy presets, resources folder and license into build output
         shell: bash
         run: |
@@ -476,7 +452,6 @@ jobs:
           cp -R resources/. build-pr/resources/
           cp LICENSE build-pr/
           rm -f build-pr/*.pdb
-
       - name: Upload PR build artifact
         uses: actions/upload-artifact@v7
         with:
@@ -517,7 +492,6 @@ jobs:
               *)         echo "❔ $1" ;;
             esac
           }
-
           {
             echo "# SubathonManager Build Summary"
             echo
@@ -575,7 +549,6 @@ jobs:
             echo
             echo "[View full run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
           } >> "$GITHUB_STEP_SUMMARY"
-
   release:
     name: Create Release
     runs-on: ubuntu-latest
@@ -599,7 +572,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y imagemagick zip unzip curl
-
       - name: Download GitHub build artifacts
         continue-on-error: true
         uses: actions/download-artifact@v8
@@ -641,23 +613,19 @@ jobs:
             rm -rf nctmp outer.zip
           done
           echo "Release assets:"; ls -la dist || true
-
       - name: Ensure at least one build is present
         shell: bash
         run: |
           if ! ls dist/*.zip >/dev/null 2>&1; then
             echo "ERROR: no build zips found (GitHub or Nextcloud)"; exit 1
           fi
-
       - name: Fetch SB Extension
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "external/streamerbot" | Out-Null
-
           Invoke-WebRequest `
           -Uri "https://sb-assets.wolfwithsword.com/extensions/subathonmanager/latest/subathonmanager-extension.sb" `
           -OutFile "external/streamerbot/SubathonManager_Extension.sb"
-
       - name: Stage streamerbot extension
         run: cp external/streamerbot/*.sb ./ || true
 
@@ -669,23 +637,18 @@ jobs:
         shell: bash
         run: |
           set -e
-
           sdplugin="external/streamdeck/com.wolfwithsword.subathonmanager.sdPlugin"
           mkdir -p "$sdplugin/images"
-
           for spec in pluginIcon:28 categoryIcon:28 actionIcon:20 keyIcon:72; do
             name="${spec%%:*}"
             size="${spec##*:}"
-
             convert icon.png -resize "${size}x${size}" "$sdplugin/images/${name}.png"
             convert icon.png -resize "$((size*2))x$((size*2))" "$sdplugin/images/${name}@2x.png"
           done
-
           (
             cd external/streamdeck
             zip -r ../../SubathonManager_StreamDeck.streamDeckPlugin com.wolfwithsword.subathonmanager.sdPlugin
           )
-
       - name: Create GitHub Release
         id: create_release
         if: startsWith(github.ref, 'refs/tags/') && github.ref != 'refs/tags/nightly' && (github.event_name != 'workflow_dispatch' || github.event.inputs.force_nightly != 'true')
@@ -741,10 +704,8 @@ jobs:
         run: |
           api="https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.ref_name }}"
           response=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$api")
-
           RELEASE_NAME=$(echo "$response" | jq -r '.name')
           echo "release_name=$RELEASE_NAME" >> $GITHUB_OUTPUT
-
       - name: Send Discord Notification
         env:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
@@ -753,7 +714,6 @@ jobs:
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
           VERSION="${{ github.ref_name }}"
           ICON_URL="https://raw.githubusercontent.com/${{ github.repository }}/refs/heads/main/assets/icon.png"
-
           cat > payload.json <<EOF
           {
             "username": "GitHub",
@@ -769,17 +729,14 @@ jobs:
             ]
           }
           EOF
-
           curl -X POST \
                -H "Content-Type: application/json" \
                -d @payload.json \
                "$WEBHOOK_URL"
-
           curl -X POST \
                -H "Content-Type: application/json" \
                -d @payload.json \
                "$WEBHOOK_URL_PRJ"
-
   update-wiki:
     if: (startsWith(github.ref, 'refs/tags/') && github.ref != 'refs/tags/nightly' && github.ref_name != 'main') || github.event.inputs.force_nightly == 'true'
     needs: release
